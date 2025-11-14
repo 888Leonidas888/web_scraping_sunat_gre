@@ -1,0 +1,36 @@
+# Directorio de descargas generado por el script
+# Es importante ignorar este directorio para no subir los archivos XML al repositorio.
+descargas_sunat/
+
+# Entornos virtuales de Python
+# Comunes en proyectos para aislar dependencias.
+venv/
+.venv/
+.dev
+env/
+
+# Archivos de caché de Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Archivos de configuración de editores e IDEs
+.vscode/
+.idea/
+
+# Archivos de sistema operativo
+.DS_Store
+Thumbs.db
+
+# Archivos de entorno para credenciales
+# Es una buena práctica guardar credenciales en un archivo .env y no en el código.
+.env
+
+# Archivos de registro (logs)
+*.log
+
+# Compilación
+build/
+dist/
+SunatDownloader.spec
