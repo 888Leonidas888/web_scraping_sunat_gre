@@ -1,7 +1,7 @@
 import os
 import logging
 import argparse
-from src.core.download_sunat_gre import automate_sunat_login
+from src.core.download_sunat_gre import process_main_sunat
 from dotenv import load_dotenv
 
 
@@ -22,7 +22,7 @@ def run_automation():
         logging.error(
             "Por favor, asegúrese de que las variables de entorno RUC_SUNAT, USUARIO_SUNAT y CONTRASENA_SUNAT estén configuradas correctamente.")
     else:
-        automate_sunat_login(URL_SUNAT, RUC, USUARIO, CONTRASENA)
+        process_main_sunat(URL_SUNAT, RUC, USUARIO, CONTRASENA)
 
 
 if __name__ == "__main__":
