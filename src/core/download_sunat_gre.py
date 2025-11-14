@@ -9,10 +9,11 @@ import time
 import random
 from selenium import webdriver
 from datetime import datetime
+from seleniumwire import webdriver as seleniumwire_webdriver  # Importar desde selenium-wire
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from webdriver_manager.chrome import ChromeDriverManager
+# from webdriver_manager.chrome import ChromeDriverManager # No es necesario con selenium-wire si Chrome está en el PATH
 from selenium.webdriver.chrome.service import Service as ChromeService
 from selenium.webdriver.chrome.options import Options
 from src.utils.utils import human_like_type, wait_for_download
@@ -28,7 +29,10 @@ def initialize_driver(download_path: str) -> Optional[webdriver.Chrome]:
         webdriver.Chrome: Instancia del controlador del navegador Chrome.
     """
     try:
-        options = Options()
+        # Usar las opciones de selenium-wire, que heredan de las de Selenium
+        options = seleniumwire_webdriver.ChromeOptions()
+        # Opciones de selenium-wire para configurar el proxy si es necesario
+        seleniumwire_options = {}
 
         # --- Argumentos para deshabilitar funciones de seguridad ---
         options.add_argument("--start-maximized")
@@ -53,8 +57,10 @@ def initialize_driver(download_path: str) -> Optional[webdriver.Chrome]:
 
         # --- Inicialización de Chrome ---
         logging.info("Inicializando el navegador Chrome...")
-        service = ChromeService(ChromeDriverManager().install())
-        driver = webdriver.Chrome(service=service, options=options)
+        # selenium-wire maneja el driver automáticamente si Chrome está instalado
+        # y chromedriver está en el PATH o es manejado por el propio selenium-wire.
+        driver = seleniumwire_webdriver.Chrome(
+            options=options, seleniumwire_options=seleniumwire_options)
         logging.info("Navegador Chrome inicializado correctamente.")
         return driver
     except Exception as e:
@@ -290,18 +296,36 @@ def search_filters_gre(driver: webdriver.Chrome) -> None:
         "arguments[0].dispatchEvent(new Event('input', { bubbles: true }));", fecha_fin_input)
     time.sleep(random.uniform(0.5, 1.5))
 
-    logging.info("Seleccionando el rango horario '12:00:00 al 15:59:59'...")
-    horario_checkbox = WebDriverWait(driver, 15).until(
-        EC.element_to_be_clickable((By.ID, "4")))
-    horario_checkbox.click()
-    time.sleep(random.uniform(0.5, 1.5))
+    # logging.info("Seleccionando el rango horario '12:00:00 al 15:59:59'...")
+    logging.info("Seleccionando el rango todos los rangos horarios'...")
+    for check_id in ["1", "2", "3"]:#, "4", "5", "6"]:
+        horario_checkbox = WebDriverWait(driver, 15).until(
+            EC.element_to_be_clickable((By.ID, check_id)))
+        horario_checkbox.click()
+        time.sleep(random.uniform(0.5, 1.5))
 
     logging.info("Haciendo clic en 'Siguiente' para iniciar la búsqueda...")
     buscar_button_xpath = "//button[contains(@class, 'col-xl-3') and normalize-space()='Siguiente']"
     buscar_button = WebDriverWait(driver, 15).until(
         EC.element_to_be_clickable((By.XPATH, buscar_button_xpath)))
     buscar_button.click()
-    time.sleep(random.uniform(3, 5))
+
+    # --- MEJORA: Reemplazar time.sleep con esperas explícitas ---
+    # 1. Esperar a que aparezca el spinner/indicador de carga (si existe)
+    #    Este XPath es un ejemplo, podría necesitar ajuste.
+    # loading_spinner_xpath = "//div[contains(@class, 'ngx-spinner-overlay')]"
+    # logging.info("Esperando a que la búsqueda de resultados comience...")
+    # WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.XPATH, loading_spinner_xpath)))
+
+    # # 2. Esperar a que el spinner desaparezca (la carga ha terminado)
+    # logging.info("Búsqueda en progreso, esperando a que los resultados carguen...")
+    # WebDriverWait(driver, 120).until(EC.invisibility_of_element_located((By.XPATH, loading_spinner_xpath)))
+
+    # # 3. Esperar a que la primera fila de la tabla de resultados sea visible
+    # first_row_xpath = "//table/tbody/tr[1]"
+    # WebDriverWait(driver, 15).until(EC.presence_of_element_located((By.XPATH, first_row_xpath)))
+    logging.info("Resultados cargados en la página.")
+    time.sleep(random.uniform(1, 4)) # Pequeña pausa adicional por si acaso
 
 
 def download_gre_all_files(driver: webdriver.Chrome, download_path: str) -> None:
@@ -331,9 +355,34 @@ def download_gre_all_files(driver: webdriver.Chrome, download_path: str) -> None
     aceptar_modal_button = WebDriverWait(driver, 15).until(
         EC.element_to_be_clickable((By.XPATH, aceptar_modal_xpath)))
     aceptar_modal_button.click()
+    
+    # Pausa para dar tiempo a que el navegador inicie la descarga del ZIP
+    time.sleep(random.uniform(3, 5))
 
     wait_for_download(download_path, timeout=120)
 
+
+def capture_and_process_requests(driver: webdriver.Chrome):
+    """
+    Inspecciona las peticiones capturadas por selenium-wire para encontrar tokens.
+
+    Args:
+        driver (webdriver.Chrome): La instancia del controlador de selenium-wire.
+    """
+    logging.info("Buscando tokens en las peticiones de red capturadas...")
+    # Iterar a través de las peticiones capturadas
+    for request in driver.requests:
+        # Buscar un token de autorización en las cabeceras de la petición
+        if request.headers.get('Authorization'):
+            logging.info(
+                f"¡Token 'Authorization' encontrado en la petición a {request.url}!")
+            logging.info(f"Token: {request.headers['Authorization']}")
+
+        # Buscar la cabecera 'Location' en las respuestas
+        if request.response and request.response.headers.get('Location'):
+            logging.info(
+                f"¡Cabecera 'Location' encontrada en la respuesta de {request.url}!")
+            logging.info(f"Location: {request.response.headers['Location']}")
 
 def process_main_sunat(url_sunat: str, ruc: str, usuario: str, contrasena: str) -> None:
     """
@@ -359,6 +408,8 @@ def process_main_sunat(url_sunat: str, ruc: str, usuario: str, contrasena: str) 
         windows_iframe_gre(driver)
         search_filters_gre(driver)
         download_gre_all_files(driver, download_path)
+
+        capture_and_process_requests(driver)
 
     except Exception as e:
         logging.error(f"Ocurrió un error durante la automatización: {e}")
