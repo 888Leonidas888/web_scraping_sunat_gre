@@ -1,0 +1,392 @@
+import requests
+import os
+import logging
+import time
+import random
+from selenium import webdriver
+from datetime import datetime, timedelta
+from selenium.common import WebDriverException
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+from webdriver_manager.chrome import ChromeDriverManager
+from selenium.webdriver.chrome.service import Service as ChromeService
+from selenium.webdriver.chrome.options import Options
+
+
+logging.basicConfig(level=logging.INFO,
+                    format='%(asctime)s - %(levelname)s - %(message)s')
+
+URL_SUNAT = 'https://www.sunat.gob.pe/sol.html'
+RUC = '20376729126'
+USUARIO = 'MAGAPSTN'
+CONTRASENA = 'MaSG3107'
+
+
+def human_like_type(element, text):
+    """
+    Simula la escritura humana en un elemento input, con pausas aleatorias.
+    """
+    for char in text:
+        element.send_keys(char)
+        # Pausa aleatoria entre caracteres
+        time.sleep(random.uniform(0.05, 0.2))
+    # Pausa después de terminar de escribir
+    time.sleep(random.uniform(0.5, 1.5))
+
+
+def wait_for_download(download_path: str, timeout: int = 60):
+    """
+    Espera a que un archivo se descargue completamente en la ruta especificada.
+
+    Args:
+        download_path (str): La ruta al directorio de descargas.
+        timeout (int): Tiempo máximo de espera en segundos.
+    """
+    seconds = 0
+    download_complete = False
+    logging.info(
+        f"Esperando la descarga en '{download_path}' durante {timeout} segundos...")
+
+    while not download_complete and seconds < timeout:
+        time.sleep(1)
+        seconds += 1
+        # Busca archivos temporales de descarga de Chrome.
+        crdownload_files = [f for f in os.listdir(
+            download_path) if f.endswith('.crdownload')]
+        if not crdownload_files and any(os.listdir(download_path)):
+            # Si no hay archivos .crdownload y la carpeta no está vacía, asumimos que la descarga finalizó.
+            download_complete = True
+            logging.info(f"Descarga completada en {seconds} segundos.")
+    if not download_complete:
+        logging.warning(
+            f"La descarga no se completó en el tiempo de espera de {timeout} segundos.")
+
+
+def automate_sunat_login(url_sunat: str, ruc: str, usuario: str, contrasena: str):
+    """
+    Automatiza el proceso de login en la página de SUNAT.
+
+    Args:
+        url_sunat (str): URL de la página principal de SUNAT.
+        ruc (str): Número de RUC para el login.
+        usuario (str): Nombre de usuario para el login.
+        contrasena (str): Contraseña para el login.
+    """
+    driver = None
+    try:
+        # --- Configurar Opciones de Edge para un inicio limpio ---
+        # Crear una carpeta de descargas dentro del proyecto si no existe
+        download_path = os.path.join(os.getcwd(), "descargas_sunat")
+        os.makedirs(download_path, exist_ok=True)
+        logging.info(f"Los archivos se guardarán en: {download_path}")
+
+        options = Options()
+
+        # --- Argumentos para deshabilitar funciones de seguridad ---
+        options.add_argument("--start-maximized")
+        options.add_argument("--disable-gpu")
+        # Desactiva explícitamente la protección de descargas de Safe Browsing a nivel de argumento
+        options.add_argument("--safebrowsing-disable-download-protection")
+
+        # --- Preferencias para controlar el comportamiento de las descargas (Configuración más robusta) ---
+        prefs = {
+            "download.default_directory": download_path,
+            "download.prompt_for_download": False,
+            "download.directory_upgrade": True,
+            # Permitir descargas múltiples
+            "profile.default_content_setting_values.automatic_downloads": 1,
+            # Mantenemos la navegación segura activada...
+            "safebrowsing.enabled": True,
+            # Desactivar la protección de descargas a nivel de perfil
+            "safebrowsing.download_protection.enabled": False
+        }
+
+        options.add_experimental_option("prefs", prefs)
+
+        # --- Inicialización de Chrome ---
+        logging.info("Inicializando el navegador Chrome...")
+        service = ChromeService(ChromeDriverManager().install())
+        driver = webdriver.Chrome(service=service, options=options)
+        logging.info("Navegador Chrome inicializado correctamente.")
+
+        # Navegar a la URL principal de SUNAT
+        logging.info(f"Navegando a la URL: {url_sunat}")
+        driver.get(url_sunat)
+        # Pausa inicial para que la página cargue
+        time.sleep(random.uniform(2, 4))
+
+        # Guardar el handle de la ventana principal
+        main_window_handle = driver.current_window_handle
+
+        # Esperar y hacer clic en el enlace "Ingresar"
+        logging.info("Buscando y haciendo clic en el enlace 'Ingresar'...")
+        ingresar_link_xpath = "//a[./span[text()='Ingresar'] and contains(@href, 'tramiteConsulta()')]"
+        ingresar_link = WebDriverWait(driver, 20).until(
+            EC.element_to_be_clickable((By.XPATH, ingresar_link_xpath))
+        )
+        ingresar_link.click()
+        time.sleep(random.uniform(1, 3))  # Pausa después del clic
+
+        # Esperar a que se abra la nueva ventana y cambiar el control a ella
+        logging.info("Esperando la nueva ventana y cambiando el control...")
+        WebDriverWait(driver, 10).until(EC.number_of_windows_to_be(2))
+        new_window_handle = None
+        for window_handle in driver.window_handles:
+            if window_handle != main_window_handle:
+                new_window_handle = window_handle
+                break
+
+        if new_window_handle:
+            driver.switch_to.window(new_window_handle)
+            logging.info("Control cambiado a la nueva ventana.")
+            # Pausa para que la nueva página cargue
+            time.sleep(random.uniform(1, 2))
+        else:
+            logging.error("No se encontró la nueva ventana. Abortando.")
+            return
+
+        # Rellenar los campos de RUC, Usuario y Contraseña
+        logging.info("Rellenando campos de RUC, Usuario y Contraseña...")
+        ruc_input = WebDriverWait(driver, 15).until(
+            EC.visibility_of_element_located((By.ID, "txtRuc")))
+        human_like_type(ruc_input, ruc)
+
+        usuario_input = WebDriverWait(driver, 15).until(
+            EC.visibility_of_element_located((By.ID, "txtUsuario")))
+        human_like_type(usuario_input, usuario)
+
+        contrasena_input = WebDriverWait(driver, 15).until(
+            EC.visibility_of_element_located((By.ID, "txtContrasena")))
+        human_like_type(contrasena_input, contrasena)
+
+        # Hacer clic en el botón "Iniciar sesión"
+        logging.info("Haciendo clic en el botón 'Iniciar sesión'...")
+        login_button = WebDriverWait(driver, 10).until(
+            EC.element_to_be_clickable((By.ID, "btnAceptar")))
+        login_button.click()
+
+        logging.info("Login exitoso. Navegando por el menú...")
+        # Pausa para que la página de bienvenida cargue completamente
+        time.sleep(random.uniform(2, 4))
+
+        # 1. Clic en la sección "Empresas"
+        logging.info("Haciendo clic en la sección 'Empresas'...")
+        empresas_button = WebDriverWait(driver, 20).until(
+            EC.element_to_be_clickable((By.ID, "divOpcionServicio2"))
+        )
+        empresas_button.click()
+        time.sleep(random.uniform(1, 2.5))
+
+        # 2. Clic en "Guía de Remisión Electrónica" (Nivel 1)
+        logging.info(
+            "Haciendo clic en 'Guía de Remisión Electrónica' (Nivel 1)...")
+        # Este elemento tiene style="display: none;" y se vuelve visible después del clic anterior.
+        # Usamos un XPath que busca el span con el texto dentro del li correcto.
+        guia_remision_n1_xpath = "//li[@id='nivel1_62']/span[contains(text(),'Guía de Remisión Electrónica')]"
+        guia_remision_n1 = WebDriverWait(driver, 15).until(
+            EC.element_to_be_clickable((By.XPATH, guia_remision_n1_xpath))
+        )
+        guia_remision_n1.click()
+        time.sleep(random.uniform(1, 2))
+
+        # 3. Clic en "Guía de Remisión Electrónica" (Nivel 2)
+        logging.info(
+            "Haciendo clic en 'Guía de Remisión Electrónica' (Nivel 2)...")
+        # Este también se vuelve visible después del clic anterior.
+        guia_remision_n2_xpath = "//li[@id='nivel2_62_1']/span[contains(text(),'Guía de Remisión Electrónica')]"
+        guia_remision_n2 = WebDriverWait(driver, 15).until(
+            EC.element_to_be_clickable((By.XPATH, guia_remision_n2_xpath))
+        )
+        guia_remision_n2.click()
+        time.sleep(random.uniform(1, 2))
+
+        # 4. Clic en "Consulta de GRE"
+        logging.info("Haciendo clic en 'Consulta de GRE'...")
+        # Este es el último nivel, que se abre dentro de un iframe.
+        consulta_gre_xpath = "//li[contains(@class, 'nivel3')]//span[contains(text(), 'Consulta de GRE')]"
+        consulta_gre = WebDriverWait(driver, 15).until(
+            EC.element_to_be_clickable((By.XPATH, consulta_gre_xpath))
+        )
+        consulta_gre.click()
+        time.sleep(random.uniform(1, 2))
+
+        # 5. Clic en "Consulta de GRE" (Nivel 4, el enlace final)
+        # Este es el enlace que carga la página de consulta. Se vuelve visible después de los clics anteriores.
+        # Para encontrarlo, usamos su ID único 'nivel4_62_1_5_1_1' y buscamos el <span> con el texto adentro.
+        # Esta es la forma más precisa de leer el HTML que proporcionaste.
+        logging.info(
+            "Haciendo clic en el enlace final 'Consulta de GRE' (Nivel 4)...")
+        consulta_gre_final_xpath = "//li[@id='nivel4_62_1_5_1_1']/span[contains(text(), 'Consulta de GRE')]"
+        consulta_gre_final = WebDriverWait(driver, 15).until(
+            EC.element_to_be_clickable((By.XPATH, consulta_gre_final_xpath))
+        )
+        consulta_gre_final.click()
+
+        logging.info(
+            "Navegación completada. Esperando a que cargue la página de consulta...")
+        # Pausa para que la página de consulta cargue.
+        time.sleep(random.uniform(3, 5))
+
+        # --- Nuevos pasos ---
+        # La página de consulta se carga dentro de un iframe. Necesitamos cambiar a él.
+        # Hay dos divs con id 'iDivApplication', y el iframe está en el primero.
+        logging.info(
+            "Buscando el iframe correcto dentro del primer div 'iDivApplication'...")
+
+        # Construimos un XPath preciso para encontrar el iframe dentro del primer div con el ID especificado.
+        iframe_xpath = "(//div[@id='iDivApplication'])[1]//iframe[@id='iframeApplication']"
+
+        # Esperamos a que el iframe esté presente y luego cambiamos el control a él.
+        iframe_element = WebDriverWait(driver, 20).until(
+            EC.presence_of_element_located((By.XPATH, iframe_xpath))
+        )
+        driver.switch_to.frame(iframe_element)
+        logging.info("Control cambiado al iframe correcto.")
+        # Esperamos a que el contenido del iframe cargue después de cambiar el contexto.
+        time.sleep(random.uniform(1, 2.5))
+
+        # Clic en el botón "GRE recibidas"
+        # El XPath busca un botón que contenga exactamente el texto "GRE recibidas" para ser más preciso.
+        logging.info(
+            "Haciendo clic en el botón 'GRE recibidas' usando el XPath completo...")
+        gre_recibidas_button_xpath = "/html/body/guia-remision-root/guia-remision-datos-iniciales/div/div/form/div[3]/div[2]/button"
+        gre_recibidas_button = WebDriverWait(driver, 15).until(
+            EC.element_to_be_clickable((By.XPATH, gre_recibidas_button_xpath))
+        )
+        gre_recibidas_button.click()
+        time.sleep(random.uniform(1, 2))
+
+        # Clic en el botón "Masiva" usando el XPath completo
+        logging.info(
+            "Haciendo clic en el botón 'Masiva' usando el XPath completo...")
+        masiva_button_xpath = "/html/body/guia-remision-root/guia-remision-datos-iniciales/div/div/form/div[4]/div[2]/button"
+        masiva_button = WebDriverWait(driver, 15).until(
+            EC.element_to_be_clickable((By.XPATH, masiva_button_xpath))
+        )
+        masiva_button.click()
+        time.sleep(random.uniform(1, 2))
+
+        # Clic en el botón "Siguiente" usando el XPath completo
+        logging.info(
+            "Haciendo clic en el botón 'Siguiente' usando el XPath completo...")
+        siguiente_button_xpath = "/html/body/guia-remision-root/guia-remision-datos-iniciales/div/div/form/div[5]/div/button"
+        siguiente_button = WebDriverWait(driver, 15).until(
+            EC.element_to_be_clickable((By.XPATH, siguiente_button_xpath)))
+        siguiente_button.click()
+        # Pausa larga para que la siguiente página cargue
+        time.sleep(random.uniform(2, 4))
+
+        # APLICAMOS EL ZOOM AL FINAL, DESPUÉS DE TODAS LAS INTERACCIONES
+        logging.info(
+            "Aplicando zoom para ver más contenido en la página final...")
+        driver.execute_script("document.body.style.zoom='80%'")
+
+        # --- Nuevos pasos en la pantalla de filtros ---
+
+        # 1. Seleccionar el checkbox "GRE - Remitente"
+        logging.info(
+            "Seleccionando el tipo de comprobante 'GRE - Remitente'...")
+        gre_remitente_label_xpath = "//label[contains(., 'GRE - Remitente')]"
+        gre_remitente_label = WebDriverWait(driver, 15).until(
+            EC.element_to_be_clickable((By.XPATH, gre_remitente_label_xpath))
+        )
+        gre_remitente_label.click()
+        time.sleep(random.uniform(0.5, 1.5))
+
+        # 2. Colocar las fechas "Desde" y "Hasta" usando JavaScript para mayor fiabilidad.
+        today = datetime.now()
+        first_day_of_month = today.replace(day=1)
+
+        # El valor de un input de tipo "date" se debe establecer en formato YYYY-MM-DD.
+        # first_day_of_month.strftime("%Y-%m-%d")
+        fecha_inicio_str = today.strftime("%Y-%m-%d")
+        fecha_fin_str = today.strftime("%Y-%m-%d")
+
+        logging.info(
+            f"Estableciendo fecha de inicio con JavaScript y disparando evento: {fecha_inicio_str}")
+        fecha_inicio_input = WebDriverWait(driver, 15).until(
+            EC.visibility_of_element_located((By.ID, "fechaInicio")))
+        # Paso 1: Establecer el valor con JS
+        driver.execute_script(
+            "arguments[0].value = arguments[1];", fecha_inicio_input, fecha_inicio_str)
+        # Paso 2: Disparar el evento 'input' para que la página reconozca el cambio
+        driver.execute_script(
+            "arguments[0].dispatchEvent(new Event('input', { bubbles: true }));", fecha_inicio_input)
+        time.sleep(random.uniform(0.5, 1.5))
+
+        logging.info(
+            f"Estableciendo fecha de fin con JavaScript y disparando evento: {fecha_fin_str}")
+        fecha_fin_input = WebDriverWait(driver, 15).until(
+            EC.visibility_of_element_located((By.ID, "fechaFin")))
+        # Repetimos el proceso para la fecha de fin
+        driver.execute_script(
+            "arguments[0].value = arguments[1];", fecha_fin_input, fecha_fin_str)
+        driver.execute_script(
+            "arguments[0].dispatchEvent(new Event('input', { bubbles: true }));", fecha_fin_input)
+        time.sleep(random.uniform(0.5, 1.5))
+
+        # 3. Marcar el checkbox del rango horario
+        logging.info(
+            "Seleccionando el rango horario '12:00:00 al 15:59:59'...")
+        horario_checkbox = WebDriverWait(driver, 15).until(
+            EC.element_to_be_clickable((By.ID, "4")))
+        horario_checkbox.click()
+        time.sleep(random.uniform(0.5, 1.5))
+
+        # 4. Clic en el botón "Siguiente" para iniciar la búsqueda
+        logging.info(
+            "Haciendo clic en 'Siguiente' para iniciar la búsqueda...")
+        # Usamos un XPath más específico para este botón y evitar confundirlo con el anterior
+        buscar_button_xpath = "//button[contains(@class, 'col-xl-3') and normalize-space()='Siguiente']"
+        buscar_button = WebDriverWait(driver, 15).until(
+            EC.element_to_be_clickable((By.XPATH, buscar_button_xpath)))
+        buscar_button.click()
+        # Pausa larga para que los resultados carguen
+        time.sleep(random.uniform(3, 5))
+
+        # --- Nuevos pasos en la página de resultados ---
+
+        # 1. Activar el checkbox principal para seleccionar todo
+        logging.info(
+            "Activando el checkbox principal para seleccionar todos los resultados...")
+        check_principal = WebDriverWait(driver, 15).until(
+            EC.element_to_be_clickable((By.NAME, "checkPrincipal"))
+        )
+        check_principal.click()
+        time.sleep(random.uniform(1, 2))
+
+        # 2. Clic en el botón "Descargar XML"
+        # Este botón empieza deshabilitado, así que esperamos a que sea clicable.
+        logging.info("Haciendo clic en 'Descargar XML'...")
+        descargar_button_xpath = "//button[normalize-space()='Descargar XML']"
+        descargar_button = WebDriverWait(driver, 15).until(
+            EC.element_to_be_clickable((By.XPATH, descargar_button_xpath)))
+        descargar_button.click()
+        time.sleep(random.uniform(1, 2))
+
+        # 3. Clic en "Aceptar" en el modal de confirmación
+        logging.info(
+            "Haciendo clic en 'Aceptar' en el modal de confirmación...")
+        aceptar_modal_xpath = "//guia-remision-modal-confirmar//button[normalize-space()='Aceptar']"
+        aceptar_modal_button = WebDriverWait(driver, 15).until(
+            EC.element_to_be_clickable((By.XPATH, aceptar_modal_xpath)))
+        aceptar_modal_button.click()
+
+        # --- Esperar a que la descarga finalice ---
+        wait_for_download(download_path, timeout=120)  # Espera hasta 2 minutos
+
+    except Exception as e:  # Captura cualquier excepción
+        logging.error(f"Ocurrió un error durante la automatización: {e}")
+    finally:
+        if driver:
+            logging.info(
+                "Proceso de automatización finalizado. Cerrando el navegador.")
+            # Pausa final opcional para ver el último estado antes de cerrar.
+            time.sleep(5)
+            driver.quit()
+            logging.info("Navegador cerrado correctamente.")
+
+
+if __name__ == "__main__":
+    automate_sunat_login(URL_SUNAT, RUC, USUARIO, CONTRASENA)
