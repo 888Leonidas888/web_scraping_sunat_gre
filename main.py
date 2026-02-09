@@ -9,7 +9,7 @@ logging.basicConfig(level=logging.INFO,
                     format='%(asctime)s - %(levelname)s - %(message)s', filename='app.log')
 
 
-def run_automation():
+def run_automation(headless: bool = False):
     """Carga las credenciales y ejecuta el proceso de automatización."""
     load_dotenv()
 
@@ -22,7 +22,7 @@ def run_automation():
         logging.error(
             "Por favor, asegúrese de que las variables de entorno RUC_SUNAT, USUARIO_SUNAT y CONTRASENA_SUNAT estén configuradas correctamente.")
     else:
-        process_main_sunat(URL_SUNAT, RUC, USUARIO, CONTRASENA)
+        process_main_sunat(URL_SUNAT, RUC, USUARIO, CONTRASENA, headless)
 
 
 if __name__ == "__main__":
@@ -30,11 +30,15 @@ if __name__ == "__main__":
         description="Automatización para descargar Guías de Remisión de SUNAT.")
     parser.add_argument('-run', action='store_true',
                         help='Ejecuta el proceso de automatización.')
+    parser.add_argument('-headless', action='store_true',
+                        help='Ejecuta el navegador sin interfaz gráfica.')
+    parser.add_argument('-help', action='help',
+                        help='Muestra este mensaje de ayuda y sale.')
 
     args = parser.parse_args()
 
     if args.run:
-        run_automation()
+        run_automation(headless=args.headless)
     else:
         logging.error(
             "El proceso no se inició. Por favor, use el argumento -run para ejecutar la automatización.")

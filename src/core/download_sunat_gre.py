@@ -9,22 +9,22 @@ import time
 import random
 from selenium import webdriver
 from datetime import datetime
-from seleniumwire import webdriver as seleniumwire_webdriver  # Importar desde selenium-wire
+from seleniumwire import webdriver as seleniumwire_webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-# from webdriver_manager.chrome import ChromeDriverManager # No es necesario con selenium-wire si Chrome está en el PATH
 from selenium.webdriver.chrome.service import Service as ChromeService
 from selenium.webdriver.chrome.options import Options
 from src.utils.utils import human_like_type, wait_for_download
 from typing import Optional
 
 
-def initialize_driver(download_path: str) -> Optional[webdriver.Chrome]:
+def initialize_driver(download_path: str, headless: bool = False) -> Optional[webdriver.Chrome]:
     """
     Inicializa el navegador Chrome con las configuraciones necesarias para la descarga automática.
     Args:
         download_path (str): Ruta donde se guardarán los archivos descargados.
+        headless (bool): Indica si se debe ejecutar el navegador en modo sin interfaz gráfica.
     Returns:
         webdriver.Chrome: Instancia del controlador del navegador Chrome.
     """
@@ -35,10 +35,22 @@ def initialize_driver(download_path: str) -> Optional[webdriver.Chrome]:
         seleniumwire_options = {}
 
         # --- Argumentos para deshabilitar funciones de seguridad ---
-        options.add_argument("--start-maximized")
         options.add_argument("--disable-gpu")
         # Desactiva explícitamente la protección de descargas de Safe Browsing a nivel de argumento
         options.add_argument("--safebrowsing-disable-download-protection")
+
+        if headless:
+            logging.info("Configurando Chrome en modo headless...")
+            options.add_argument("--headless=new")
+            options.add_argument("--no-sandbox")
+            options.add_argument("--disable-dev-shm-usage")
+            # Forzar un tamaño de ventana grande y constante en modo headless
+            options.add_argument("--window-size=1920,1080")
+            # En modo headless a veces es necesario establecer un user-agent para evitar bloqueos básicos
+            options.add_argument(
+                "user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+        else:
+            options.add_argument("--start-maximized")
 
         # --- Preferencias para controlar el comportamiento de las descargas (Configuración más robusta) ---
         prefs = {
@@ -252,7 +264,15 @@ def windows_iframe_gre(driver: webdriver.Chrome) -> None:
     siguiente_button_xpath = "/html/body/guia-remision-root/guia-remision-datos-iniciales/div/div/form/div[5]/div/button"
     siguiente_button = WebDriverWait(driver, 15).until(
         EC.element_to_be_clickable((By.XPATH, siguiente_button_xpath)))
-    siguiente_button.click()
+    # Desplazar al elemento para asegurar que sea visible antes de clicar
+    driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", siguiente_button)
+    time.sleep(1)
+    # Usar JS click si el click estándar falla o es interceptado
+    try:
+        siguiente_button.click()
+    except Exception:
+        logging.warning("Click estándar falló, intentando con JavaScript...")
+        driver.execute_script("arguments[0].click();", siguiente_button)
     time.sleep(random.uniform(2, 4))
 
 
@@ -310,20 +330,6 @@ def search_filters_gre(driver: webdriver.Chrome) -> None:
         EC.element_to_be_clickable((By.XPATH, buscar_button_xpath)))
     buscar_button.click()
 
-    # --- MEJORA: Reemplazar time.sleep con esperas explícitas ---
-    # 1. Esperar a que aparezca el spinner/indicador de carga (si existe)
-    #    Este XPath es un ejemplo, podría necesitar ajuste.
-    # loading_spinner_xpath = "//div[contains(@class, 'ngx-spinner-overlay')]"
-    # logging.info("Esperando a que la búsqueda de resultados comience...")
-    # WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.XPATH, loading_spinner_xpath)))
-
-    # # 2. Esperar a que el spinner desaparezca (la carga ha terminado)
-    # logging.info("Búsqueda en progreso, esperando a que los resultados carguen...")
-    # WebDriverWait(driver, 120).until(EC.invisibility_of_element_located((By.XPATH, loading_spinner_xpath)))
-
-    # # 3. Esperar a que la primera fila de la tabla de resultados sea visible
-    # first_row_xpath = "//table/tbody/tr[1]"
-    # WebDriverWait(driver, 15).until(EC.presence_of_element_located((By.XPATH, first_row_xpath)))
     logging.info("Resultados cargados en la página.")
     time.sleep(random.uniform(1, 4)) # Pequeña pausa adicional por si acaso
 
@@ -362,59 +368,80 @@ def download_gre_all_files(driver: webdriver.Chrome, download_path: str) -> None
     wait_for_download(download_path, timeout=120)
 
 
-def capture_and_process_requests(driver: webdriver.Chrome):
+def extract_auth_token(driver: webdriver.Chrome) -> Optional[str]:
     """
-    Inspecciona las peticiones capturadas por selenium-wire para encontrar tokens.
+    Busca y extrae el token de Authorization de las peticiones capturadas.
 
     Args:
         driver (webdriver.Chrome): La instancia del controlador de selenium-wire.
+    Returns:
+        Optional[str]: El token encontrado o None si no se halla.
     """
-    logging.info("Buscando tokens en las peticiones de red capturadas...")
-    # Iterar a través de las peticiones capturadas
-    for request in driver.requests:
-        # Buscar un token de autorización en las cabeceras de la petición
-        if request.headers.get('Authorization'):
-            logging.info(
-                f"¡Token 'Authorization' encontrado en la petición a {request.url}!")
-            logging.info(f"Token: {request.headers['Authorization']}")
+    logging.info("Buscando token 'Authorization' en las peticiones de red...")
+    # Iterar en reversa para obtener el token más reciente
+    for request in reversed(driver.requests):
+        auth_header = request.headers.get('Authorization')
+        if auth_header and "Bearer" in auth_header:
+            logging.info(f"¡Token encontrado en la petición a: {request.url}!")
+            return auth_header
+    return None
 
-        # Buscar la cabecera 'Location' en las respuestas
-        if request.response and request.response.headers.get('Location'):
-            logging.info(
-                f"¡Cabecera 'Location' encontrada en la respuesta de {request.url}!")
-            logging.info(f"Location: {request.response.headers['Location']}")
 
-def process_main_sunat(url_sunat: str, ruc: str, usuario: str, contrasena: str) -> None:
+def process_main_sunat(url_sunat: str, ruc: str, usuario: str, contrasena: str, headless: bool = False) -> Optional[str]:
     """
-    Función principal para automatizar el proceso de login y descarga de GRE desde SUNAT.
+    Función optimizada: Realiza login, navega hasta el módulo GRE, extrae el token
+    de sesión y finaliza el proceso para uso posterior vía API.
 
     Args:
         url_sunat (str): URL de la página principal de SUNAT.
         ruc (str): Número de RUC para el login.
         usuario (str): Nombre de usuario para el login.
-        contrasena (str): Contraseña para el login.        
+        contrasena (str): Contraseña para el login.
+        headless (bool): Indica si se debe ejecutar en modo sin interfaz gráfica.
+
+    Returns:
+        Optional[str]: El token de Authorization capturado.
     """
     driver = None
+    token = None
     try:
         download_path = create_download_directory()
-        driver = initialize_driver(download_path)
+        driver = initialize_driver(download_path, headless=headless)
 
         if not driver:
-            return
+            return None
 
+        # 1. Login y navegación base
         page_main_sunat(driver, url_sunat)
         login_sunat(driver, ruc, usuario, contrasena)
+
+        # 2. Navegar al árbol de GRE y entrar al Iframe
+        # Este punto dispara las peticiones a la API de SUNAT con el token JWT
         selection_tree_gre(driver)
         windows_iframe_gre(driver)
-        search_filters_gre(driver)
-        download_gre_all_files(driver, download_path)
 
-        capture_and_process_requests(driver)
+        # 3. Captura del token
+        # Reintentamos brevemente por si la petición tarda unos ms en procesarse
+        for i in range(5):
+            token = extract_auth_token(driver)
+            if token:
+                break
+            logging.info(f"Reintentando captura de token ({i+1}/5)...")
+            time.sleep(1.5)
+
+        if token:
+            logging.info("Proceso de captura completado exitosamente.")
+            # Opcional: imprimir para que procesos externos lo capturen fácilmente
+            print(f"\n[TOKEN_SUCCESS]\n{token}\n")
+        else:
+            logging.error("No se pudo capturar el token tras la navegación.")
+
+        return token
 
     except Exception as e:
         logging.error(f"Ocurrió un error durante la automatización: {e}")
+        return None
     finally:
         if driver:
-            logging.info("Proceso finalizado. Cerrando el navegador.")
+            logging.info("Cerrando el navegador.")
             driver.quit()
-            logging.info("Navegador cerrado correctamente.")
