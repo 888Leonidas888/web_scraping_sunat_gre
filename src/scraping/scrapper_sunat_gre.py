@@ -13,13 +13,36 @@ from seleniumwire import webdriver as seleniumwire_webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from selenium.webdriver.chrome.service import Service as ChromeService
-from selenium.webdriver.chrome.options import Options
 from src.utils.utils import human_like_type, wait_for_download
 from typing import Optional
+from dotenv import load_dotenv
 
 
-def initialize_driver(download_path: str, headless: bool = False) -> Optional[webdriver.Chrome]:
+URL_SUNAT = ''
+RUC = ''
+USUARIO = ''
+CONTRASENA = ''
+
+def _init_configuration() -> None:
+    """Carga las credenciales y ejecuta el proceso de automatización."""
+    load_dotenv()
+
+    global URL_SUNAT
+    global RUC
+    global USUARIO
+    global CONTRASENA
+    
+    URL_SUNAT = os.getenv('URL_SUNAT', '')
+    RUC = os.getenv('RUC_SUNAT', '')
+    USUARIO = os.getenv('USUARIO_SUNAT', '')
+    CONTRASENA = os.getenv('CONTRASENA_SUNAT', '')
+
+    if all(v == '' for v in [URL_SUNAT, RUC, USUARIO, CONTRASENA]):
+        logging.error(
+            "Por favor, asegúrese de que las variables de entorno URL_SUNAT, RUC_SUNAT, USUARIO_SUNAT y CONTRASENA_SUNAT estén configuradas correctamente.")
+        raise ValueError("Las variables de entorno URL_SUNAT, RUC_SUNAT, USUARIO_SUNAT y CONTRASENA_SUNAT no están configuradas.")
+
+def _initialize_driver(download_path: str, headless: bool = False) -> Optional[webdriver.Chrome]:
     """
     Inicializa el navegador Chrome con las configuraciones necesarias para la descarga automática.
     Args:
@@ -80,7 +103,7 @@ def initialize_driver(download_path: str, headless: bool = False) -> Optional[we
         return None
 
 
-def create_download_directory() -> str:
+def _create_download_directory() -> str:
     """
     Crea un directorio para guardar los archivos descargados.
     Returns:
@@ -92,7 +115,7 @@ def create_download_directory() -> str:
     return download_path
 
 
-def page_main_sunat(driver: webdriver.Chrome, url_sunat: str) -> None:
+def _page_main_sunat(driver: webdriver.Chrome, url_sunat: str) -> None:
     """
     Navega a la página principal de SUNAT y abre la ventana de login.
 
@@ -136,7 +159,7 @@ def page_main_sunat(driver: webdriver.Chrome, url_sunat: str) -> None:
         raise Exception("No se pudo encontrar o cambiar a la nueva ventana.")
 
 
-def login_sunat(driver: webdriver.Chrome, ruc: str, usuario: str, contrasena: str) -> None:
+def _login_sunat(driver: webdriver.Chrome, ruc: str, usuario: str, contrasena: str) -> None:
     """
     Realiza el login en la página de SUNAT.
     Args:
@@ -168,7 +191,7 @@ def login_sunat(driver: webdriver.Chrome, ruc: str, usuario: str, contrasena: st
     time.sleep(random.uniform(2, 4))
 
 
-def selection_tree_gre(driver: webdriver.Chrome) -> None:
+def _selection_tree_gre(driver: webdriver.Chrome) -> None:
     """
     Navega por el menú de SUNAT para llegar a la sección de Consulta de GRE.
     Args:
@@ -225,7 +248,7 @@ def selection_tree_gre(driver: webdriver.Chrome) -> None:
     time.sleep(random.uniform(3, 5))
 
 
-def windows_iframe_gre(driver: webdriver.Chrome) -> None:
+def _windows_iframe_gre(driver: webdriver.Chrome) -> None:
     """
     Cambia el control al iframe correcto dentro de la página de consulta de GRE.
     Args:
@@ -276,7 +299,7 @@ def windows_iframe_gre(driver: webdriver.Chrome) -> None:
     time.sleep(random.uniform(2, 4))
 
 
-def search_filters_gre(driver: webdriver.Chrome) -> None:
+def _search_filters_gre(driver: webdriver.Chrome) -> None:
     """
     Aplica los filtros de búsqueda para las GRE.
     Args:
@@ -334,7 +357,7 @@ def search_filters_gre(driver: webdriver.Chrome) -> None:
     time.sleep(random.uniform(1, 4)) # Pequeña pausa adicional por si acaso
 
 
-def download_gre_all_files(driver: webdriver.Chrome, download_path: str) -> None:
+def _download_gre_all_files(driver: webdriver.Chrome, download_path: str) -> None:
     """
     Descarga todos los archivos GRE disponibles después de aplicar los filtros.
     Args:
@@ -368,7 +391,7 @@ def download_gre_all_files(driver: webdriver.Chrome, download_path: str) -> None
     wait_for_download(download_path, timeout=120)
 
 
-def extract_auth_token(driver: webdriver.Chrome) -> Optional[str]:
+def _extract_auth_token(driver: webdriver.Chrome) -> Optional[str]:
     """
     Busca y extrae el token de Authorization de las peticiones capturadas.
 
@@ -387,16 +410,12 @@ def extract_auth_token(driver: webdriver.Chrome) -> Optional[str]:
     return None
 
 
-def process_main_sunat(url_sunat: str, ruc: str, usuario: str, contrasena: str, headless: bool = False) -> Optional[str]:
+def start_scrapper(headless: bool = False) -> Optional[str]:
     """
     Función optimizada: Realiza login, navega hasta el módulo GRE, extrae el token
     de sesión y finaliza el proceso para uso posterior vía API.
 
     Args:
-        url_sunat (str): URL de la página principal de SUNAT.
-        ruc (str): Número de RUC para el login.
-        usuario (str): Nombre de usuario para el login.
-        contrasena (str): Contraseña para el login.
         headless (bool): Indica si se debe ejecutar en modo sin interfaz gráfica.
 
     Returns:
@@ -405,25 +424,26 @@ def process_main_sunat(url_sunat: str, ruc: str, usuario: str, contrasena: str, 
     driver = None
     token = None
     try:
-        download_path = create_download_directory()
-        driver = initialize_driver(download_path, headless=headless)
+        _init_configuration()
+        download_path = _create_download_directory()
+        driver = _initialize_driver(download_path, headless=headless)
 
         if not driver:
             return None
 
         # 1. Login y navegación base
-        page_main_sunat(driver, url_sunat)
-        login_sunat(driver, ruc, usuario, contrasena)
+        _page_main_sunat(driver, URL_SUNAT)
+        _login_sunat(driver, RUC, USUARIO, CONTRASENA)
 
         # 2. Navegar al árbol de GRE y entrar al Iframe
         # Este punto dispara las peticiones a la API de SUNAT con el token JWT
-        selection_tree_gre(driver)
-        windows_iframe_gre(driver)
+        _selection_tree_gre(driver)
+        _windows_iframe_gre(driver)
 
         # 3. Captura del token
         # Reintentamos brevemente por si la petición tarda unos ms en procesarse
         for i in range(5):
-            token = extract_auth_token(driver)
+            token = _extract_auth_token(driver)
             if token:
                 break
             logging.info(f"Reintentando captura de token ({i+1}/5)...")
