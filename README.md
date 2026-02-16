@@ -1,97 +1,107 @@
-# Automatización de Descarga de Guías de Remisión (SUNAT)
+# 🚀 SunatDownloader - Automatización de Guías de Remisión (GRE)
 
-Este proyecto contiene un script de Python que automatiza el proceso de descarga masiva de Guías de Remisión Electrónicas (GRE) en formato XML desde el portal SOL de la SUNAT (Perú).
+Este proyecto es una solución integral para la automatización del portal SOL de la SUNAT (Perú). Permite la extracción masiva de tokens de sesión, consulta de Guías de Remisión Electrónicas (GRE) a través de APIs oficiales y la preparación de datos para su almacenamiento externo.
 
-## Funcionalidades Principales
+## ✨ Funcionalidades Principales
 
-- **Inicio de Sesión Automático**: Ingresa al portal SOL de SUNAT con las credenciales proporcionadas.
-- **Navegación Compleja**: Navega a través de los menús y submenús del portal hasta llegar a la sección de consulta de GRE.
-- **Relleno de Formularios**: Completa automáticamente los filtros de búsqueda, como el rango de fechas y el tipo de comprobante.
-- **Selección y Descarga**: Selecciona todos los resultados de la búsqueda y descarga los archivos XML correspondientes.
-- **Gestión de Descargas**: Espera activamente a que los archivos se descarguen por completo antes de finalizar.
-- **Cierre Automático**: Cierra el navegador de forma automática una vez que el proceso ha concluido.
+- **Web Scraping Avanzado**: Inicio de sesión automático y captura de tokens de seguridad mediante interceptación de tráfico de red.
+- **Consulta Masiva vía API**: Orquestación de peticiones masivas filtradas por RUC emisor, receptor y fecha actual.
+- **Arquitectura Limpia**: Separación estricta entre lógica de scraping, servicios y modelos de datos.
+- **Resiliencia**: Manejo de errores granular que permite continuar el proceso ante fallas individuales de documentos o emisores.
+- **CI/CD Ready**: Automatización de pruebas unitarias mediante GitHub Actions.
 
 ---
 
-## Requisitos
-
-Para ejecutar este script, necesitas tener instalado lo siguiente:
+## 📋 Requisitos
 
 - **Python 3.12+**
-- **Google Chrome**: El script utiliza Chrome para la automatización.
-- Las librerías de Python listadas en `requirements.txt`.
+- **Google Chrome**: Necesario para la automatización con Selenium.
+- **ChromeDriver**: Gestionado automáticamente por `webdriver-manager`.
 
 ---
 
 ## ⚙️ Instalación
 
-1.  **Clona o descarga este repositorio:**
-    ```bash
-    git clone <URL-DEL-REPOSITORIO>
-    cd <NOMBRE-DEL-DIRECTORIO>
-    ```
+1. **Clona el repositorio:**
+   ```bash
+   git clone <URL-DEL-REPOSITORIO>
+   cd web_scraping_sunat_gre
+   ```
 
-2.  **(Recomendado) Crea un entorno virtual:**
-    ```bash
-    python -m venv venv
-    ```
-    Y actívalo:
-    - En Windows: `venv\Scripts\activate`
-    - En macOS/Linux: `source venv/bin/activate`
+2. **Crea y activa un entorno virtual:**
+   ```bash
+   # En Windows
+   python -m venv .dev
+   .dev\Scripts\activate
+   ```
 
-3.  **Instala las dependencias:**
-    ```bash
-    pip install -r requirements.txt
-    ```
+3. **Instala las dependencias:**
+   ```bash
+   pip install -r requirements.txt
+   ```
 
 ---
 
-## 📝 Configuración
+## 📝 Configuración (.env)
 
-Antes de ejecutar el script, debes configurar tus credenciales de acceso a la SUNAT.
-
-Abre el archivo `.env` y modifica las siguientes variables con tus datos:
+El archivo `.env` es crítico para el funcionamiento. Asegúrese de configurar las siguientes variables:
 
 ```dotenv
-RUC_SUNAT = 'TU_NUMERO_DE_RUC'
-USUARIO_SUNAT = 'TU_USUARIO_SOL'
-CONTRASENA_SUNAT = 'TU_CLAVE_SOL'
+# Credenciales de acceso al Portal SOL
+RUC_SUNAT = '20XXXXXXXXX'
+USUARIO_SUNAT = 'USUARIO_SOL'
+CONTRASENA_SUNAT = 'CLAVE_SOL'
 URL_SUNAT = 'https://www.sunat.gob.pe/sol.html'
-```
 
->[!NOTE]
-> El archivo `.env` debe estar en la raiz del proyecto.
+# Configuración de búsqueda masiva
+RUC_RECEPTOR = '20XXXXXXXXX'
+# EMITTER_RUCS: RUCs emisores separados por coma (sin espacios adicionales)
+EMITTER_RUCS = '20100364451,20546654261'
+```
 
 ---
 
 ## ▶️ Uso
 
-Una vez configurado, simplemente ejecuta el script desde tu terminal:
-
+### Ejecución Principal
+Para iniciar el proceso de extracción de token y consulta masiva:
 ```bash
 python main.py -run
 ```
 
-El script iniciará el navegador, realizará todo el proceso de forma automática y guardará los archivos XML descargados en una carpeta llamada `descargas_sunat` dentro del directorio del proyecto. Al finalizar, el navegador se cerrará solo.
+### Ejecutar Pruebas (Tests)
+El proyecto usa `pytest` para asegurar que la lógica de negocio sea correcta:
+```bash
+# Ejecutar todos los tests unitarios
+pytest tests/test_proccess_logic.py
+```
+
+### Crear Ejecutable (.exe)
+Si necesitas distribuir la herramienta en entornos Windows:
+```bash
+pyinstaller --windowed --add-data ".env;." --icon "src/assets/img/icon_xml_256_30060.ico" --name "SunatDownloader" main.py
+```
+
+---
+
+## 🛠️ Desarrollo y CI/CD
+
+- **GitHub Actions**: Cada vez que realices un `push` a las ramas `main` o `feat/*`, GitHub ejecutará automáticamente los tests definidos para asegurar la integridad del código.
+- **Logs**: El sistema genera un archivo `app.log` detallado para auditar cada paso (Token capturado, errores de API, documentos encontrados, etc.).
 
 ---
 
 ## 📄 Estructura del Proyecto
 
 ```
-├── descargas_sunat/  # Carpeta donde se guardan los XML (creada automáticamente)
-├── src
-├── .gitignore        # Archivos y carpetas ignorados por Git
-├── main.py          # El script principal de automatización
-├── README.md         # Este archivo
-└── requirements.txt  # Lista de dependencias de Python
+├── .github/workflows/ # Configuración de GitHub Actions
+├── src/
+│   ├── core/         # Orquestadores y lógica de negocio principal
+│   ├── models/       # Validaciones con Pydantic (GRE, Filtros, Paginación)
+│   ├── scraping/     # Automatización con Selenium y captura de tokens
+│   ├── service/      # Clientes de API (SUNAT y Almacenamiento)
+│   └── utils/        # Funciones de apoyo genéricas
+├── tests/            # Pruebas unitarias
+├── main.py           # Punto de entrada del script
+└── requirements.txt  # Dependencias del proyecto
 ```
-
-## 🤖 Crear ejecutable
-
-Use el siguiente comando para crear un ejecutable:
-
-```python
-pyinstaller --windowed --add-data ".env;." --icon "src/assets/img/icon_xml_256_30060.ico" --name "SunatDownloader" main.py
-```
----

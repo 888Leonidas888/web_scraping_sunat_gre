@@ -56,7 +56,7 @@ def get_gre_by_ruc_and_serie(token: str, documento: str) -> Optional[SunatGreMod
         return None
 
 
-def get_gre_bacth(token: str, filter: dict) -> Optional[SunatGreBatchResponse]:
+def get_gre_batch(token: str, filter: dict) -> Optional[SunatGreBatchResponse]:
     """
     Realiza una búsqueda masiva de Guías de Remisión según filtros de fecha o estado.
 
@@ -64,7 +64,7 @@ def get_gre_bacth(token: str, filter: dict) -> Optional[SunatGreBatchResponse]:
     ---
         token (str): Token Bearer de autenticación.
         filter (dict): Diccionario con parámetros de búsqueda.
-                       Ejemplo: {"fecInicio": "2024-01-01", "fecFin": "2024-01-31", "page": 1}
+                       Ejemplo: {"fecEmisionIni": "2024-01-01", "fecEmisionFin": "2024-01-01", "page": 1}
 
     Returns:
     ---
