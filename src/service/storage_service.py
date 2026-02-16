@@ -1,6 +1,10 @@
 import logging
 from typing import List
 from src.models.sunat_gre_model import SunatGreModel
+import os
+from dotenv import load_dotenv
+import requests
+load_dotenv()
 
 
 class StorageService:
@@ -9,24 +13,12 @@ class StorageService:
     Por ahora funciona como un placeholder.
     """
 
-    def __init__(self, api_url: str = ""):
+    def __init__(self):
+        api_url = os.getenv('INTERNAL_SERVICE_API', None)
+        if not api_url:
+            raise ValueError(
+                "La variable de entorno INTERNAL_SERVICE_API no está definida.")
         self.api_url = api_url
-
-    def store_gre_batch(self, gres: List[SunatGreModel]) -> bool:
-        """
-        Envía un lote de GREs al servicio externo.
-        """
-        try:
-            logging.info(
-                f"Enviando {len(gres)} GREs al servicio de almacenamiento...")
-            # Aquí se implementará la llamada HTTP al servicio .NET mas adelante
-            # response = requests.post(f"{self.api_url}/api/gre/batch", json=[gre.model_dump() for gre in gres])
-            # response.raise_for_status()
-            return True
-        except Exception as e:
-            logging.error(
-                f"Error al enviar datos al servicio de almacenamiento: {e}")
-            return False
 
     def store_gre(self, gre: SunatGreModel) -> bool:
         """
@@ -34,8 +26,10 @@ class StorageService:
         """
         try:
             logging.info(
-                f"Enviando GRE {gre.numSerie}-{gre.numCpe} al servicio de almacenamiento...")
-            # Aquí se implementará la llamada HTTP
+                f"Enviando GRE {gre.numSerie}-{gre.numCpe} al servicio de almacenamiento... {self.api_url}")
+            url = f"{self.api_url}/api/v1/guia"
+            response = requests.post(url, json=gre.model_dump())
+            response.raise_for_status()
             return True
         except Exception as e:
             logging.error(
