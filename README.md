@@ -17,7 +17,7 @@ Este proyecto contiene un script de Python que automatiza el proceso de descarga
 
 Para ejecutar este script, necesitas tener instalado lo siguiente:
 
-- **Python 3.7+**
+- **Python 3.12+**
 - **Google Chrome**: El script utiliza Chrome para la automatización.
 - Las librerías de Python listadas en `requirements.txt`.
 
@@ -56,13 +56,11 @@ Abre el archivo `.env` y modifica las siguientes variables con tus datos:
 RUC_SUNAT = 'TU_NUMERO_DE_RUC'
 USUARIO_SUNAT = 'TU_USUARIO_SOL'
 CONTRASENA_SUNAT = 'TU_CLAVE_SOL'
+URL_SUNAT = 'https://www.sunat.gob.pe/sol.html'
 ```
 
 >[!NOTE]
 > El archivo `.env` debe estar en la raiz del proyecto.
-
-> **⚠️ Advertencia de Seguridad**
-> No es una buena práctica mantener credenciales directamente en el código fuente, especialmente si planeas compartir el proyecto o subirlo a un repositorio público. Se recomienda utilizar variables de entorno.
 
 ---
 

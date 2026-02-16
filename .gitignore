@@ -34,3 +34,6 @@ Thumbs.db
 build/
 dist/
 SunatDownloader.spec
+
+# Archivos basura
+main_test.py
