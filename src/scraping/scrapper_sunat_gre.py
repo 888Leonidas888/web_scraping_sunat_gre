@@ -456,7 +456,7 @@ def start_scrapper(headless: bool = False) -> Optional[str]:
         else:
             logging.error("No se pudo capturar el token tras la navegación.")
 
-        return token
+        return token.split(' ')[1]
 
     except Exception as e:
         logging.error(f"Ocurrió un error durante la automatización: {e}")

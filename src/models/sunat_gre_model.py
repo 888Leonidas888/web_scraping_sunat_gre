@@ -25,7 +25,7 @@ class Emision(BaseModel):
     desNota: str
     desHashQr: str
     desQr: str
-    receptorObs: List[ReceptorObs]
+    receptorObs: Optional[List[ReceptorObs]] = None
     pse: Pse
     firma: Firma
     numIpCliente: Optional[str] = None
@@ -73,7 +73,7 @@ class Traslado(BaseModel):
     desMotivoTrasladoOtros: Optional[str] = None
     fecInicioTraslado: Optional[str] = None
     numPlacaVehiculo: Optional[str] = None
-    fecEntrega: str
+    fecEntrega: Optional[str] = None
     indModalidadTraslado: str
     desModalidadTraslado: str
     indTrasladoVehiculo: str

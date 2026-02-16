@@ -42,3 +42,9 @@ def wait_for_download(download_path: str, timeout: int = 60):
     if not download_complete:
         logging.warning(
             f"La descarga no se completó en el tiempo de espera de {timeout} segundos.")
+
+def dict_to_query_params(data: dict) -> str:
+    """
+    Convierte un diccionario en una cadena de parámetros de consulta (query string).
+    """
+    return "&".join([f"{k}={v}" for k, v in data.items()])
