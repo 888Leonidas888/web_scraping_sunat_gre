@@ -37,3 +37,5 @@ SunatDownloader.spec
 
 # Archivos basura
 main_test.py
+
+.env.bak
