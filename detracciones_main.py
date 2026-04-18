@@ -428,16 +428,40 @@ def process_massive_downloads(driver, token, results, download_path):
     print("="*30 + "\n")
 
 def main():
-    parser = argparse.ArgumentParser(description="Detracciones SUNAT")
-    parser.add_argument('-run', action='store_true')
-    parser.add_argument('-headless', action='store_true')
+    parser = argparse.ArgumentParser(
+        description="SunatDownloader - Automatización de Detracciones",
+        formatter_class=argparse.RawTextHelpFormatter,
+        epilog="Ejemplos:\n"
+               "  python detracciones_main.py -run --path \"C:\\SUNAT\" --year 2026\n"
+               "  python detracciones_main.py -run --path \"\\\\Servidor\\Descargas\" --year 2026 --month 4"
+    )
+    parser.add_argument('-run', action='store_true', help="Ejecuta el proceso de automatización")
+    parser.add_argument('-headless', action='store_true', help="Ejecuta Chrome en modo oculto")
+    parser.add_argument('--path', type=str, help="Ruta base de descarga (Obligatorio)")
+    parser.add_argument('--year', type=int, help="Año a consultar (Obligatorio)")
+    parser.add_argument('--month', type=int, help="Mes a consultar (Opcional, 1-12)")
+
     args = parser.parse_args()
 
     if not args.run:
-        print("Usa -run para ejecutar.")
+        parser.print_help()
         return
 
-    # Inicializar Base de Datos Din\u00e1mica
+    # Validaciones Obligatorias
+    if not args.path:
+        print("ERROR: El parámetro --path es obligatorio.")
+        return
+    if not args.year:
+        print("ERROR: El parámetro --year es obligatorio.")
+        return
+    if args.month and not (1 <= args.month <= 12):
+        print("ERROR: El mes debe estar entre 1 y 12.")
+        return
+
+    # Determinando meses a procesar
+    meses_a_procesar = [args.month] if args.month else list(range(1, 13))
+    
+    # Inicializar Base de Datos Dinámica
     init_db()
 
     driver, _ = initialize_driver(headless=args.headless)
@@ -445,7 +469,7 @@ def main():
     try:
         if login_sunat(driver):
             if navigate_to_detracciones(driver):
-                # 1. Capturar Token
+                # 1. Capturar Token inicial
                 for _ in range(15):
                     token = capture_idcache_token(driver)
                     if token: break
@@ -453,9 +477,7 @@ def main():
                 
                 if token:
                     print(f"\n[TOKEN_CAPTURED]: {token}\n")
-                    # Cerramos el navegador de navegación ya que tenemos el token
-                    driver.quit()
-                    logging.info("Navegador de navegación cerrado tras captura de token.")
+                    driver.quit() # Cerramos navegador de login
                 else:
                     print("Error: No se encontró el token de consulta.")
                     driver.quit()
@@ -469,26 +491,46 @@ def main():
             driver.quit()
             return
 
-        # 2. Modo API Masivo
+        # 2. Procesamiento por Meses
         if token:
-            # Rango de fechas (puedes parametrizar esto después)
-            f_ini = "15/04/2026"
-            f_fin = "15/04/2026"
+            print(f"Iniciando procesamiento para el año {args.year}...")
             
-            res = download_detracciones_api(token, f_ini, f_fin)
-            if res:
-                count = len(res.get('resultado', [])) if isinstance(res, dict) else 0
-                print(f"API OK: {count} registros encontrados.")
+            for mes in meses_a_procesar:
+                # Calcular último día del mes
+                ultimo_dia = calendar.monthrange(args.year, mes)[1]
+                f_ini = f"01/{mes:02d}/{args.year}"
+                f_fin = f"{ultimo_dia:02d}/{mes:02d}/{args.year}"
                 
-                # 3. Descarga Masiva (Usando un driver nuevo 100% headless para los PDFs)
-                print("Iniciando motor de PDF (Headless)...")
-                pdf_driver, download_path = initialize_driver(headless=True)
-                try:
-                    process_massive_downloads(pdf_driver, token, res, download_path)
-                finally:
-                    pdf_driver.quit()
-            else:
-                print("API Falló (revisa el log).")
+                # Crear estructura de carpetas: PATH/AÑO/MES
+                nombre_mes = datetime(args.year, mes, 1).strftime("%B").capitalize()
+                path_mes = os.path.join(args.path, str(args.year), f"{mes:02d}_{nombre_mes}")
+                os.makedirs(path_mes, exist_ok=True)
+                
+                print(f"\n>>> Consultando: {nombre_mes} {args.year} ({f_ini} - {f_fin})")
+                
+                res = download_detracciones_api(token, f_ini, f_fin)
+                if res:
+                    pago_list = res.get('resultado', [])
+                    print(f"API OK: {len(pago_list)} registros encontrados.")
+                    
+                    if pago_list:
+                        # Motor PDF Headless independiente por mes
+                        pdf_driver, _ = initialize_driver(headless=True)
+                        try:
+                            process_massive_downloads(pdf_driver, token, res, path_mes)
+                        finally:
+                            pdf_driver.quit()
+                    
+                    # Pausa aleatoria entre consultas de meses para evitar baneo (5 a 10 seg)
+                    if len(meses_a_procesar) > 1 and mes != meses_a_procesar[-1]:
+                        wait = random.uniform(5, 10)
+                        print(f"Esperando {wait:.2f}s para el siguiente mes...")
+                        time.sleep(wait)
+                else:
+                    print(f"No se pudieron obtener datos para el mes {mes}.")
+            
+            print("\n!!! PROCESO FINALIZADO !!!")
+
     except Exception as e:
         logging.error(f"Error crítico en main: {e}")
         if 'driver' in locals(): driver.quit()
