@@ -105,7 +105,7 @@ def reconstruct_constancia_html(pago: PagoDetraccion) -> Optional[str]:
         logger.error(f"Falla crítica en Modo Tanque al reconstruir HTML: {e}")
         return None
 
-def process_massive_downloads(headless_driver, token: str, api_response: Dict[str, Any], month_path: str) -> None:
+def process_massive_downloads(headless_driver, token: str, api_response: Dict[str, Any], month_path: str, filtro_excel: set = None) -> None:
     """
     Iterador central BPA que procesa cada pago:
     1. Descarga Constancia Oficial (si falla -> Modo Tanque).
@@ -144,6 +144,11 @@ def process_massive_downloads(headless_driver, token: str, api_response: Dict[st
 
         for pago in pagos_model_list:
             
+            # FILTRO POR EXCEL: Saltamos si no está en la lista blanca de requerimientos
+            if filtro_excel:
+                if (pago.num_ruc_proveedor, pago.num_constancia) not in filtro_excel:
+                    continue
+
             provider_folder = f"{pago.num_ruc_proveedor} - {clean_filename(pago.des_prov)}"
             provider_path = os.path.join(month_path, provider_folder)
             os.makedirs(provider_path, exist_ok=True)
