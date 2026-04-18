@@ -365,8 +365,12 @@ def save_html_as_pdf(driver, html_content, filename):
         logging.error(f"Error al convertir HTML a PDF: {e}")
         return False
 
-def process_massive_downloads(driver, token, results, download_path):
-    """Itera sobre los resultados con reintentos, delays y reconstrucción local."""
+def clean_filename(name):
+    """Elimina caracteres inválidos para nombres de carpetas en Windows."""
+    return re.sub(r'[<>:"/\\|?*]', '', name).strip()
+
+def process_massive_downloads(driver, token, results, month_path):
+    """Itera sobre los resultados organizando por carpetas de Proveedor."""
     pagos = results.get('resultado', [])
     if not pagos:
         print("No hay pagos para descargar.")
@@ -381,7 +385,15 @@ def process_massive_downloads(driver, token, results, download_path):
 
     for pago in total_constancias:
         num_constancia = pago.get('num_constancia')
-        pdf_filename = os.path.join(download_path, f"{num_constancia}.pdf")
+        ruc_prov = pago.get('num_ruc_proveedor', 'SIN_RUC')
+        razon_social = clean_filename(pago.get('des_prov', 'PROVEEDOR_DESCONOCIDO'))
+        
+        # Crear subcarpeta del proveedor: [RUC] - [RAZON SOCIAL]
+        provider_folder = f"{ruc_prov} - {razon_social}"
+        provider_path = os.path.join(month_path, provider_folder)
+        os.makedirs(provider_path, exist_ok=True)
+        
+        pdf_filename = os.path.join(provider_path, f"{num_constancia}.pdf")
         
         # 1. Intentar descargar el original de SUNAT
         html_content = download_constancia_api(token, num_constancia)
@@ -395,12 +407,11 @@ def process_massive_downloads(driver, token, results, download_path):
             html_content = reconstruct_constancia_html(pago)
             is_reconstructed = True
         
-
         if html_content:
             # 2. Convertir y Guardar
             if save_html_as_pdf(driver, html_content, pdf_filename):
                 status = "[RECONSTRUIDO]" if is_reconstructed else "[ORIGINAL]"
-                print(f"{status} Descargado: {num_constancia}.pdf")
+                print(f"{status} -> {provider_folder} | {num_constancia}.pdf")
                 logging.info(f"{status} Archivo guardado: {pdf_filename}")
                 success_count += 1
                 if is_reconstructed: reconstructed_count += 1
