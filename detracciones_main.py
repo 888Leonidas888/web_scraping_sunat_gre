@@ -365,15 +365,22 @@ def save_html_as_pdf(driver, html_content, filename):
         logging.error(f"Error al convertir HTML a PDF: {e}")
         return False
 
+from rich.console import Console
+from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskProgressColumn, TimeRemainingColumn
+from rich.panel import Panel
+from rich.text import Text
+
+console = Console()
+
 def clean_filename(name):
-    """Elimina caracteres inválidos para nombres de carpetas en Windows."""
+    """Elimina caracteres inv\u00e1lidos para nombres de carpetas en Windows."""
     return re.sub(r'[<>:"/\\|?*]', '', name).strip()
 
 def process_massive_downloads(driver, token, results, month_path):
-    """Itera sobre los resultados organizando por carpetas de Proveedor."""
+    """Itera sobre los resultados organizando por carpetas de Proveedor con Progeso Visual."""
     pagos = results.get('resultado', [])
     if not pagos:
-        print("No hay pagos para descargar.")
+        console.print("[yellow]No hay pagos para descargar.[/yellow]")
         return
 
     failed_constancias = []
@@ -381,62 +388,64 @@ def process_massive_downloads(driver, token, results, month_path):
     reconstructed_count = 0
     
     total_constancias = [p for p in pagos if p.get('num_constancia')]
-    print(f"Iniciando procesamiento de {len(total_constancias)} constancias...")
-
-    for pago in total_constancias:
-        num_constancia = pago.get('num_constancia')
-        ruc_prov = pago.get('num_ruc_proveedor', 'SIN_RUC')
-        razon_social = clean_filename(pago.get('des_prov', 'PROVEEDOR_DESCONOCIDO'))
-        
-        # Crear subcarpeta del proveedor: [RUC] - [RAZON SOCIAL]
-        provider_folder = f"{ruc_prov} - {razon_social}"
-        provider_path = os.path.join(month_path, provider_folder)
-        os.makedirs(provider_path, exist_ok=True)
-        
-        pdf_filename = os.path.join(provider_path, f"{num_constancia}.pdf")
-        
-        # 1. Intentar descargar el original de SUNAT
-        html_content = download_constancia_api(token, num_constancia)
-        
-        if html_content:
-            is_reconstructed = False
-            # APRENDIZAJE: Si logramos bajar el original, actualizamos la DB con los nombres reales
-            update_mappings_from_html(html_content)
-        else:
-            logging.warning(f"SUNAT fall\u00f3 para {num_constancia}. Iniciando RECONSTRUCCI\u00d3N local...")
-            html_content = reconstruct_constancia_html(pago)
-            is_reconstructed = True
-        
-        if html_content:
-            # 2. Convertir y Guardar
-            if save_html_as_pdf(driver, html_content, pdf_filename):
-                status = "[RECONSTRUIDO]" if is_reconstructed else "[ORIGINAL]"
-                print(f"{status} -> {provider_folder} | {num_constancia}.pdf")
-                logging.info(f"{status} Archivo guardado: {pdf_filename}")
-                success_count += 1
-                if is_reconstructed: reconstructed_count += 1
-            else:
-                logging.error(f"Error fatal al convertir PDF: {num_constancia}")
-                failed_constancias.append(num_constancia)
-        else:
-            logging.error(f"No se pudo obtener ni reconstruir la constancia: {num_constancia}")
-            failed_constancias.append(num_constancia)
-        
-        # Delay suave (0.5 a 1.5s ya que no saturamos tanto el API de descarga)
-        time.sleep(random.uniform(0.5, 1.5))
-
-    # Reporte Final
-    print("\n" + "="*30)
-    print("RESUMEN DE PROCESAMIENTO")
-    print(f"Total encontrados: {len(total_constancias)}")
-    print(f"Éxito Total: {success_count}")
-    print(f" -> Originales de SUNAT: {success_count - reconstructed_count}")
-    print(f" -> Reconstruidos local: {reconstructed_count}")
-    print(f"Fallidos: {len(failed_constancias)}")
     
+    with Progress(
+        SpinnerColumn(),
+        TextColumn("[progress.description]{task.description}"),
+        BarColumn(bar_width=None, pulse_style="bright_blue"),
+        TaskProgressColumn(),
+        TimeRemainingColumn(),
+        console=console,
+        transient=False
+    ) as progress:
+        
+        task = progress.add_task("[cyan]Descargando detracciones...", total=len(total_constancias))
+
+        for pago in total_constancias:
+            num_constancia = pago.get('num_constancia')
+            ruc_prov = pago.get('num_ruc_proveedor', 'SIN_RUC')
+            razon_social = clean_filename(pago.get('des_prov', 'PROVEEDOR_DESCONOCIDO'))
+            
+            provider_folder = f"{ruc_prov} - {razon_social}"
+            provider_path = os.path.join(month_path, provider_folder)
+            os.makedirs(provider_path, exist_ok=True)
+            
+            pdf_filename = os.path.join(provider_path, f"{num_constancia}.pdf")
+            
+            html_content = download_constancia_api(token, num_constancia)
+            
+            if html_content:
+                is_reconstructed = False
+                update_mappings_from_html(html_content)
+            else:
+                html_content = reconstruct_constancia_html(pago)
+                is_reconstructed = True
+            
+            if html_content:
+                if save_html_as_pdf(driver, html_content, pdf_filename):
+                    status_text = "[bold yellow]RECONSTRUIDO[/bold yellow]" if is_reconstructed else "[bold green]ORIGINAL[/bold green]"
+                    progress.console.print(f"{status_text} | {ruc_prov} | {num_constancia}.pdf")
+                    success_count += 1
+                    if is_reconstructed: reconstructed_count += 1
+                else:
+                    failed_constancias.append(num_constancia)
+            else:
+                failed_constancias.append(num_constancia)
+            
+            progress.update(task, advance=1)
+            time.sleep(random.uniform(0.5, 1.5))
+
+    # Reporte Final con Estilo
+    summary = Text()
+    summary.append("\n\u2550\u2550\u2550 RESUMEN DE PROCESAMIENTO \u2550\u2550\u2550\n", style="bold cyan")
+    summary.append(f"Encontrados: {len(total_constancias)}\n", style="white")
+    summary.append(f"Exito: {success_count}\n", style="bold green")
+    summary.append(f" -> SUNAT Original: {success_count - reconstructed_count}\n", style="green")
+    summary.append(f" -> Reconstruidos: {reconstructed_count}\n", style="yellow")
     if failed_constancias:
-        print(f"Lista de fallidos: {failed_constancias}")
-    print("="*30 + "\n")
+        summary.append(f"Fallidos: {len(failed_constancias)} {failed_constancias}\n", style="bold red")
+    
+    console.print(Panel(summary, border_style="bright_blue"))
 
 def main():
     parser = argparse.ArgumentParser(
