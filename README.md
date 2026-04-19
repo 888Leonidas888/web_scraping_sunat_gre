@@ -134,7 +134,7 @@ Para generar un ejecutable independiente (`.exe`) que pueda ser distribuido sin 
 Ejecuta el siguiente comando desde la raíz del proyecto:
 
 ```bash
-pyinstaller --windowed --add-data ".env;." --icon "assets/img/iconfinder.ico" --name "SunatDownloader" main.py
+pyinstaller --add-data "sunat_mappings.db;." --add-data ".env;." --icon "assets/img/iconfinder.ico" --name "ScrapperDetracciones" main.py
 ```
 
 ### Detalles de Distribución:
