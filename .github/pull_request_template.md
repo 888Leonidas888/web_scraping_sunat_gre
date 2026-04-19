@@ -12,7 +12,7 @@
 <!-- Describe las pruebas realizadas para validar tus cambios -->
 - [ ] ✅ Pruebas Unitarias (`pytest`) pasan correctamente
 - [ ] 🔍 Verificación manual en el entorno SOL (si aplica)
-- [ ] 📄 Verificación de logs en `app.log`
+- [ ] 📄 Verificación de logs en `detraccion.log`
 
 ## 📋 Checklist
 - [ ] Mi código sigue los estándares del proyecto (Clean Architecture)
