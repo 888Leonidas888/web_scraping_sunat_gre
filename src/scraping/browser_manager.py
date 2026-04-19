@@ -4,6 +4,7 @@ from src.utils.logger import get_logger
 
 logger = get_logger("Browser_Manager")
 
+
 def initialize_driver(headless: bool = False) -> tuple[webdriver.Chrome, str]:
     """
     Configura e inicializa el Chrome WebDriver en modo interceptor.
@@ -15,12 +16,15 @@ def initialize_driver(headless: bool = False) -> tuple[webdriver.Chrome, str]:
         options.add_argument("--no-sandbox")
         options.add_argument("--disable-dev-shm-usage")
         options.add_argument("--window-size=1920,1080")
+        # sin esta options, navegar en modo oculto falla.
+        options.add_argument(
+            "user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
     else:
         options.add_argument("--start-maximized")
-    
+
     download_path = os.path.join(os.getcwd(), "descargas_detracciones")
     os.makedirs(download_path, exist_ok=True)
-    
+
     prefs = {
         "download.default_directory": download_path,
         "download.prompt_for_download": False,
@@ -34,9 +38,9 @@ def initialize_driver(headless: bool = False) -> tuple[webdriver.Chrome, str]:
     options.add_experimental_option("prefs", prefs)
     options.add_experimental_option("excludeSwitches", ["enable-automation"])
     options.add_experimental_option('useAutomationExtension', False)
-    
+
     logger.info(f"Inicializando Chrome Driver (Headless: {headless})...")
-    
+
     try:
         driver = webdriver.Chrome(options=options)
         return driver, download_path

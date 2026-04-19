@@ -65,3 +65,20 @@ python main.py -run -headless --path "\\Servidor\Contabilidad\Detracciones" --ye
 - `src/core/`: Consumos HTTP independientes (`requests`) al Portal y operaciones CRUD con SQLite.
 - `src/service/`: Lógica de negocio (reconstrucción de plantilla, orquestación de iteraciones y visualización gráfica vía consola).
 - `src/utils/`: Control temporal, parseo y validación de nombres de directorios.
+
+
+## 📦 Compilación y Distribución
+
+Para generar un ejecutable independiente (`.exe`) que pueda ser distribuido sin necesidad de instalar Python en la máquina destino, se utiliza **PyInstaller**.
+
+### Comando de Compilación
+
+Ejecuta el siguiente comando desde la raíz del proyecto:
+
+```bash
+pyinstaller --add-data "sunat_mappings.db;." --add-data ".env;." --icon "assets/img/iconfinder.ico" --name "ScrapperDetracciones" main.py
+```
+
+> [!NOTE]
+> Después de la compilación deberá mover el archivo `sunat_mappings.db` y `.env` a la carpeta `dist/ScrapperDetracciones` junto con el ejecutable.
+> La base de datos `sunat_mappings.db` es necesaria para que el programa funcione correctamente ya viene cargada de no estarlo puede ejecutar el archvivo `src/utils/populate.db` para cargarla.
