@@ -15,6 +15,7 @@ from src.utils.excel_reader import get_excel_filters
 
 logger = get_logger("Main")
 
+
 def main():
     parser = argparse.ArgumentParser(
         description="SunatDownloader - RPA & BPA para SPOT (Detracciones)",
@@ -24,12 +25,18 @@ def main():
   python main.py -run --path "C:\\SUNAT" --excel "lista_detracciones.xlsx"
   python main.py -run -headless --path "\\\\Servidor\\Descargas" --year 2026 --month 4"""
     )
-    parser.add_argument('-run', action='store_true', help="Ejecuta el proceso RPA de extracción de Token y posterior BPA.")
-    parser.add_argument('-headless', action='store_true', help="Oculta la ventana de Chrome durante el RPA (Ideal para Servidor).")
-    parser.add_argument('--path', type=str, help="Carpeta o ruta de red donde guardar PDFs.")
-    parser.add_argument('--year', type=int, help="Año del periodo de pagos (ignorada si se usa --excel).")
-    parser.add_argument('--month', type=int, help="(Opcional) Un mes específico en numérico (ignorada si se usa --excel).")
-    parser.add_argument('--excel', type=str, help="(Opcional) Ruta al archivo Excel para filtrar qué constancias descargar.")
+    parser.add_argument('-run', action='store_true',
+                        help="Ejecuta el proceso RPA de extracción de Token y posterior BPA.")
+    parser.add_argument('-headless', action='store_true',
+                        help="Oculta la ventana de Chrome durante el RPA (Ideal para Servidor).")
+    parser.add_argument('--path', type=str,
+                        help="Carpeta o ruta de red donde guardar PDFs.")
+    parser.add_argument(
+        '--year', type=int, help="Año del periodo de pagos (ignorada si se usa --excel).")
+    parser.add_argument(
+        '--month', type=int, help="(Opcional) Un mes específico en numérico (ignorada si se usa --excel).")
+    parser.add_argument(
+        '--excel', type=str, help="(Opcional) Ruta al archivo Excel para filtrar qué constancias descargar.")
 
     args = parser.parse_args()
 
@@ -49,7 +56,7 @@ def main():
         return
 
     logger.info("=== INICIANDO SUNAT DOWNLOADER ===")
-    
+
     # Init Backend SQLite
     init_db()
 
@@ -65,25 +72,26 @@ def main():
             return
         periodos_a_procesar = periodos_excel
     else:
-        # Modo Tradicional
         meses = [args.month] if args.month else list(range(1, 13))
         periodos_a_procesar = [(args.year, m) for m in meses]
 
     # Fase 1: RPA -> Capturar IDCache
-    driver, _ = initialize_driver(headless=args.headless)
+    driver = initialize_driver(headless=args.headless)
     token = None
-    
+
     try:
         if login_sunat(driver):
             if navigate_to_detracciones(driver):
                 logger.info("Intentando interceptar Token XHR...")
                 for _ in range(15):
                     token = capture_idcache_token(driver)
-                    if token: break
+                    if token:
+                        break
                     time.sleep(2)
-                
+
                 if token:
-                    print(f"\n[ÉXITO RPA] Token Idcache capturado: {token[:20]}...\n")
+                    print(
+                        f"\n[ÉXITO RPA] Token Idcache capturado: {token[:20]}...\n")
                 else:
                     logger.error("Se agotó el tiempo para atrapar el Token.")
                     return
@@ -93,7 +101,7 @@ def main():
         else:
             logger.error("Fallo durante el login en SUNAT.")
             return
-            
+
     finally:
         driver.quit()
 
@@ -107,38 +115,44 @@ def main():
             last_day = calendar.monthrange(anio_param, mes_param)[1]
             f_ini = f"01/{mes_param:02d}/{anio_param}"
             f_fin = f"{last_day:02d}/{mes_param:02d}/{anio_param}"
-            
-            month_name = datetime(anio_param, mes_param, 1).strftime("%B").capitalize()
+
+            month_name = datetime(anio_param, mes_param,
+                                  1).strftime("%B").capitalize()
             path_anio = os.path.join(args.path, str(anio_param))
             os.makedirs(path_anio, exist_ok=True)
-            
-            logger.info(f"-> BPA Consultando Petición API para Periodo: {mes_param:02d}/{anio_param}")
-            print(f"\n=> PERIODO: {month_name.upper()} {anio_param} ({f_ini} al {f_fin})")
-            
+
+            logger.info(
+                f"-> BPA Consultando Petición API para Periodo: {mes_param:02d}/{anio_param}")
+            print(
+                f"\n=> PERIODO: {month_name.upper()} {anio_param} ({f_ini} al {f_fin})")
+
             api_res = download_detracciones_api(token, f_ini, f_fin)
-            
+
             if api_res:
                 count = api_res.get('resultado', [])
                 print(f"=> DOCUMENTOS ENCONTRADOS EN API: {len(count)}")
 
                 # Motor PDF sin cabeza
-                pdf_driver, _ = initialize_driver(headless=True)
+                pdf_driver = initialize_driver(headless=True)
                 try:
                     # Se pasa el filtro de Excel (puede estar vacío en modo tradicional)
-                    process_massive_downloads(pdf_driver, token, api_res, path_anio, filtro_excel)
+                    process_massive_downloads(
+                        pdf_driver, token, api_res, path_anio, filtro_excel)
                 finally:
                     pdf_driver.quit()
-                
+
                 # Evasión (Pausar entre meses) solo si hay más por delante
                 if len(periodos_a_procesar) > 1 and index < len(periodos_a_procesar) - 1:
                     w = random.uniform(5, 10)
                     time.sleep(w)
             else:
-                logger.warning(f"La API de SUNAT retornó datos nulos/inválidos para {mes_param:02d}/{anio_param} o no hay pagos.")
-                
+                logger.warning(
+                    f"La API de SUNAT retornó datos nulos/inválidos para {mes_param:02d}/{anio_param} o no hay pagos.")
+
         print("\n[OK] AUTOMATIZACIÓN COMPLETADA CON ÉXITO.\n")
     except Exception as e:
         logger.error(f"Falla total irrecuperable en Fase BPA: {e}")
+
 
 if __name__ == "__main__":
     main()
